@@ -1,0 +1,26 @@
+<?php
+
+namespace Vanguard\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class FedexInvoiceFbt extends Model
+{
+    protected $table = 'fedex_invoice_fbt';
+
+    protected $fillable = [
+        'invoice_number',
+        'order_reference',
+        'document_id',
+        'destination_country',
+        'tracking_number',
+        'label_url',
+        'auxiliary_url',
+        'invoice_pdf_url',
+        'tally_data',
+    ];
+
+    protected $casts = [
+        'tally_data' => 'array',
+    ];
+}

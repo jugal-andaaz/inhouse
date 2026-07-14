@@ -1,0 +1,87 @@
+@charset "UTF-8";
+.ordertotal {display: flex;justify-content: space-between;width: 100%;max-width:320px;padding: 10px;border: 1px solid #ccc;border-radius: 5px;float: left;}
+.ordertotaldiv{width:100%;max-width: 48%;margin: 0 !important;float: left;min-width: 320px;}
+.ordertotal-info li.list-group-item span {text-align: right;float: right;}
+.custom-card-container {display: flex;flex-wrap: wrap;gap: 5px;margin: 0 !important;}
+.grandtotal {background: #adb5bd !important;color: #30353e;font-weight: 700;font-size: 14px;}
+.ct-edit-table {width: 100%;margin: 0 !important;padding: 0.4rem !important;}
+.card-body-table {padding: 0.25rem !important;}
+.ct-edit-table .input {text-align: center;height: 2rem !important;padding: 5px !important;border-radius: 5px;border: 1px solid #ccc;}
+.ordertop-info ul {max-width: 24%;display: inline-block;width: 100%;vertical-align: top;margin-right: 5px;}
+ul.shortdes {max-width: 100%;}
+ul.shortdes label{font-weight: 600;}
+.table thead th, .ulhead {color: #fff !important;background: #30353e;font-size: 14px;list-style: none;font-weight: 700;}
+.ct-edit-td {font-size: 0.8rem;padding: 5px !important;}
+.button-instra {margin-bottom: 4px !important;}
+.half-width {width: calc(50% - 2.5px);}
+.full-width {width: 100%;}
+.custom-card {margin: 0 !important;}
+.instruction-container {display: flex;flex-direction: row;justify-content: space-between;gap: 5px;padding: 5px;}
+.comment-trackinfo {display: inline-block;max-width: 800px;float: right;}
+.ct-instra-th {padding: 0.2rem !important;}
+li.list-group-item.orderstatus {text-transform: capitalize;}
+.product-tbl-font{font-size: 14px;}
+.greenshade {background: #179970 !important;}
+.text-holdstatus {color: #e73aa8 !important;font-weight: 700;}
+.navbar-expand-lg .navbar-toggler {display: block !important;}
+.navbar-expand-lg .navbar-toggler.mr-3{ display:none !important; }
+td.statement-td.d-block.d-md-table-cell.mb-3.td.img {max-width: 216px;}
+.high-lightbg{background-color: #ffff00;}
+.lnh-20{line-height: 20px;}
+h6 {background-color: #30353e;color: white;padding: 5px;text-align: center;border: 1px solid #ccc;}
+li.commentbt-border {list-style: none;border-bottom: 1px solid #ccc;padding-bottom: 20px;padding-top: 15px;}
+li.commentbt-border .text-muted{float: right;}
+.measurementlog{padding-left:4px;border-left:1px solid #B6B4B4;border-bottom:1px solid #B6B4B4;font-size:8pt;}
+#loading-overlay {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(255, 255, 255, 0.85);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.loader-container {
+    text-align: center;
+}
+.loader-container .message {
+    margin-top: 10px;
+    font-size: 18px;
+    color: #333;
+}
+#searchopt,#searchmainbtn #search-users-btn,
+input#searchform {background: #2e333cdb;color: #fff !important;border-radius: 10px;}
+
+#searchopt::placeholder,
+#searchmainbtn #search-users-btn::placeholder,
+input#searchform::placeholder {color: #fff;}
+
+@media (min-width: 991.98px) {
+    .sidebar:not(.expanded) {margin-left: -250px;}
+    .content-page{margin-left: 0 !important;}
+}
+
+@media (max-width: 768px) {
+    .ordertop-info ul,.half-width,.product-tbl td,
+    .full-width {width: 100% !important;max-width:100%;}
+}
+
+@media screen and (max-width: 600px) {
+    .ordertotaldiv,.ordertotal-info .statement-td.ordertotal-info,
+    .comment-trackinfo{max-width: 100% !important; width: 100%;}
+}
+
+@media (min-width: 768px) and (max-width: 1024px) { 
+    .statement-td::before {text-algn:center;display: none;} 
+}
+
+@media print {
+    .btn-primary.printbtn{display: none;}
+    table thead th.printfont{color: #FFFFFF !important; background-color: #000000 !important; font-size: 24px;list-style: none;font-weight: 700;}
+    table.product-tbl-font thead th {color: #000000 !important; background-color: #CCCCCC !important; font-size: 14px;list-style: none;font-weight: 700;}
+    table tbody td.printfonttd, table tbody td.printfonttd p{ font-weight: 700;font-size:22px; }
+    .ordertop-info .tdStyle,
+    .high-lightbg,
+    .printfonttdvalue{ font-size:22px; } .table-bordered, .table-bordered td.printfonttd,.table-bordered td.high-lightbg, .table-bordered th {padding: 5px !important;}
+}

@@ -1,0 +1,87 @@
+<nav class="col-md-2 sidebar">
+    <div class="user-box text-center pt-5 pb-3">
+        <div class="user-img">
+            <img src="{{ auth()->user()->present()->avatar }}"
+                 width="90"
+                 height="90"
+                 alt="user-img"
+                 class="rounded-circle img-thumbnail img-responsive">
+        </div>
+        <h5 class="my-3">
+            <a href="{{ route('profile') }}">{{ auth()->user()->present()->nameOrEmail }}</a>
+        </h5>
+
+        <ul class="list-inline mb-2">
+            <li class="list-inline-item">
+                <a href="{{ route('profile') }}" title="@lang('My Profile')">
+                    <i class="fas fa-cog"></i>
+                </a>
+            </li>
+
+            <li class="list-inline-item">
+                <a href="{{ route('auth.logout') }}" class="text-custom" title="@lang('Logout')">
+                    <i class="fas fa-sign-out-alt"></i>
+                </a>
+            </li>
+        </ul>
+    </div>
+
+    <div class="sidebar-sticky">
+        <ul class="nav flex-column">
+            {{-- Ship FedEx — visible to roles with the fedexftb permission --}}
+            @if(auth()->user()->hasPermission('fedexftb'))
+            <li class="nav-item sfx-wrap">
+                <a class="nav-link sfx-link {{ Request::is('fedex/shipment/create') ? 'sfx-active' : '' }}"
+                   href="/fedex/shipment/create" target="__blank">
+                    <span class="sfx-inner">
+                        <i class="fas fa-plane sfx-plane"></i>
+                        <span class="sfx-text">
+                            <span class="sfx-wordmark"><span class="sfx-fed">Fed</span><span class="sfx-ex">Ex</span></span>
+                            <small class="sfx-sub">Ship Now</small>
+                        </span>
+                        <span class="sfx-chevron"><i class="fas fa-chevron-right"></i></span>
+                        <span class="sfx-badge">Express</span>
+                    </span>
+                </a>
+            </li>
+            @endif
+
+            @foreach (\Vanguard\Plugins\Vanguard::availablePlugins() as $plugin)
+                @include('partials.sidebar.items', ['item' => $plugin->sidebar()])
+            @endforeach
+
+        </ul>
+    </div>
+
+<style>
+/* ── Ship FedEx highlighted sidebar item ─────────────────────── */
+    .sfx-wrap { margin: 12px 8px 48px; } 
+    .sfx-link {display: block;padding: 0 !important;border-radius: 10px;overflow: hidden;text-decoration: none !important;
+        box-shadow: 0 4px 20px rgba(77,20,140,.7),0 0 0 1px rgba(255,98,0,.35),inset 0 1px 0 rgba(255,255,255,.08);animation: sfxPulse 3s ease-in-out infinite;transition: transform .25s ease, box-shadow .25s ease;}
+    .sfx-link:hover,.sfx-link.sfx-active {box-shadow: 0 6px 28px rgba(255,98,0,.65),0 0 0 2px #FF6200,inset 0 1px 0 rgba(255,255,255,.14);transform: translateX(4px) scale(1.01);animation: none;}
+    @keyframes sfxPulse {0%,100% { box-shadow: 0 4px 20px rgba(77,20,140,.7),  0 0 0 1px rgba(255,98,0,.35),  inset 0 1px 0 rgba(255,255,255,.08); }50%      { box-shadow: 0 4px 28px rgba(255,98,0,.65), 0 0 0 2px rgba(255,98,0,.7),   inset 0 1px 0 rgba(255,255,255,.08); }}
+    .sfx-inner {display: flex;align-items: center;gap: 11px;background: linear-gradient(120deg, #380d78 0%, #4D148C 55%, #5a1799 100%);padding: 12px 12px 12px 13px;position: relative;overflow: hidden;}
+    .sfx-inner::before {content: '';position: absolute;inset: 0 0 auto 0;background: linear-gradient(90deg, #FF6200 0%, rgba(255,98,0,0) 70%);z-index: 2;}
+    .sfx-inner::after {content: '';position: absolute;inset: 0;background: linear-gradient(105deg,transparent 25%,rgba(255,255,255,.13) 50%,transparent 75%);transform: translateX(-160%);animation: sfxShimmer 4s ease-in-out infinite;pointer-events: none;z-index: 0;}
+    @keyframes sfxShimmer {0%,55% { transform: translateX(-160%); }100%   { transform: translateX(260%); }}
+    .sfx-plane {font-size: 22px !important;color: #fff !important;width: auto !important;margin: 0 !important;flex-shrink: 0;animation: sfxFly 2s ease-in-out infinite;filter: drop-shadow(0 0 6px rgba(255,98,0,.85));position: relative;z-index: 1;}
+    @keyframes sfxFly {0%,100% { transform: translate(4px,-4px) rotate(-23deg) scale(1);    }40%      { transform: translate(7px,-7px) rotate(-28deg) scale(1.1);  }70%      { transform: translate(2px,-2px) rotate(-18deg) scale(0.95); }}
+    .sfx-link:hover .sfx-plane,.sfx-link.sfx-active .sfx-plane {animation: sfxFlyFast 2s ease-in-out infinite;filter: drop-shadow(0 0 9px rgba(255,98,0,1));}
+    @keyframes sfxFlyFast {0%,100% { transform: translate(4px,-4px) rotate(-23deg) scale(1);    }50%      { transform: translate(9px,-9px) rotate(-30deg) scale(1.12); }}
+    /* FedEx wordmark + subtitle */
+    .sfx-text {display: flex;flex-direction: column;line-height: 1;flex: 1;position: relative;z-index: 1;}
+    .sfx-wordmark { line-height: 1; }
+    .sfx-fed { color: #fff;    font-weight: 900; font-size: 17px; letter-spacing: -.5px; font-style: normal; }
+    .sfx-ex  { color: #FF6200; font-weight: 900; font-size: 17px; letter-spacing: -.5px; font-style: italic; }
+    .sfx-sub {display: block;color: rgba(255,255,255,.6);font-size: 9px;font-weight: 500;text-transform: uppercase;letter-spacing: 1.4px;margin-top: 3px;font-style: normal;}
+    /* Bouncing chevron */
+    .sfx-chevron {color: rgba(255,255,255,.45);font-size: 10px;flex-shrink: 0;position: relative;z-index: 1;animation: sfxBounce 1.6s ease-in-out infinite;}
+    @keyframes sfxBounce {
+        0%,100% { transform: translateX(0);   opacity: .45; }
+        50%      { transform: translateX(4px); opacity: .9;  }
+    }
+    .sfx-link:hover .sfx-chevron,.sfx-link.sfx-active .sfx-chevron {color: #FF6200;animation: sfxBounce 0.85s ease-in-out infinite;}
+    /* Express badge */
+    .sfx-badge {position: absolute;top: 6px;right: 8px;background: #FF6200;color: #fff;font-size: 7px;font-weight: 800;text-transform: uppercase;letter-spacing: .9px;padding: 2px 5px 2px 5px;border-radius: 3px;z-index: 2;line-height: 1.4;pointer-events: none;}
+</style>
+</nav> 

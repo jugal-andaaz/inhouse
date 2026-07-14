@@ -1,0 +1,132 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration {
+    public function up(): void
+    {
+        Schema::create('andaaz_inhouse_new', function (Blueprint $table) {
+            $table->increments('id');
+            $table->string('order_product_id', 255)->nullable();
+            $table->string('order_id', 50);
+            $table->text('order_date');
+            $table->text('order_comment')->nullable();
+            $table->string('product_item_id', 10);
+            $table->text('product_sku');
+            $table->text('product_description');
+            $table->text('product_name');
+            $table->text('product_qty');
+            $table->text('product_img');
+            $table->text('product_size');
+            $table->text('product_shipping_status');
+            $table->string('product_dispatch_date', 30);
+            $table->text('product_status');
+            $table->text('product_factory_status')->nullable();
+            $table->text('product_factory_status_bom')->nullable();
+            $table->text('product_comment')->nullable();
+            $table->text('product_comments_history')->nullable();
+            $table->string('product_courier', 20)->nullable();
+            $table->text('product_tracking')->nullable();
+            $table->string('id_pattern', 20)->nullable();
+            $table->text('customer_name')->nullable();
+            $table->text('log')->nullable();
+            $table->text('shipping_details')->nullable();
+            $table->string('rr_refund_date', 30)->nullable();
+            $table->text('rr_store_status')->nullable();
+            $table->text('rr_status_verify')->nullable();
+            $table->text('rr_further_action')->nullable();
+            $table->text('rr_further_action_reason')->nullable();
+            $table->text('rr_further_action_reason_other')->nullable();
+            $table->string('rr_credit_status', 20)->nullable();
+            $table->string('rr_refund_status', 20)->nullable();
+            $table->string('rr_amount', 20)->nullable();
+            $table->text('rr_payment_gateway')->nullable();
+            $table->string('qc_status', 50)->nullable();
+            $table->string('factory_beg', 10)->nullable()->default('Not Ready');
+            $table->string('is_urgent', 4)->nullable()->default('NO');
+            $table->string('mm_pending', 4)->nullable()->default('NO');
+            $table->string('fn_year', 5)->nullable();
+            $table->integer('mmtid')->nullable()->default(0);
+            $table->boolean('insert_status')->nullable()->default(false);
+            $table->dateTime('updated_date')->nullable();
+            $table->string('updated_by', 30)->nullable();
+            $table->integer('order_entity_id')->nullable();
+            $table->string('shipped', 5)->nullable()->default('NO');
+            $table->dateTime('shipped_date')->nullable();
+            $table->dateTime('product_due_date')->nullable();
+            $table->integer('item_flag')->nullable()->default(0);
+            $table->string('flag_text', 25)->nullable()->default('Normal');
+            $table->decimal('base_price', 12, 4)->nullable()->default(0.0000);
+            $table->decimal('price', 12, 4)->nullable()->default(0.0000);
+            $table->decimal('base_discount_amount', 12, 4)->nullable()->default(0.0000);
+            $table->decimal('discount_amount', 12, 4)->nullable()->default(0.0000);
+            $table->decimal('discount_percent', 12, 4)->nullable()->default(0.0000);
+            $table->decimal('row_total', 12, 4)->nullable()->default(0.0000);
+            $table->string('category', 20)->nullable();
+            $table->string('product_type', 50)->nullable();
+            $table->string('mmt_type', 50)->nullable();
+            $table->string('qc_reason', 50)->nullable();
+            $table->string('qc_remark', 250)->nullable();
+            $table->string('description', 500)->nullable();
+            $table->text('mmtdetail')->nullable();
+            $table->string('fabricator', 35)->nullable();
+            $table->string('embroidary', 35)->nullable();
+            $table->string('fabric_na', 35)->nullable();
+            $table->string('dry_clean', 35)->nullable();
+            $table->string('kali_cutting', 35)->nullable();
+            $table->string('additional_piece', 35)->nullable();
+            $table->string('dyer', 35)->nullable();
+            $table->string('factory_unit_type', 10)->nullable();
+            $table->string('mmt_pending_reason', 100)->nullable();
+            $table->string('assigned_to', 25)->nullable();
+            $table->string('festival_delivery_status', 30)->nullable();
+            $table->string('notify_mmt', 35)->nullable()->default('Verified');
+            $table->dateTime('notify_date')->nullable();
+            $table->string('notify_by', 25)->nullable();
+            $table->tinyInteger('verify_status')->nullable()->default(0);
+            $table->dateTime('verify_date')->nullable();
+            $table->string('verify_by', 35)->nullable();
+            $table->tinyInteger('verify_step')->nullable()->default(0);
+            $table->string('hs_type', 35)->nullable();
+            $table->string('hs_fabric', 35)->nullable();
+            $table->string('hscode', 35)->nullable();
+            $table->tinyInteger('notify_to_factory')->nullable()->default(0);
+            $table->tinyInteger('notify_to_sales')->nullable()->default(0);
+            $table->string('notify_type', 35)->nullable();
+            $table->string('assignedto', 25)->nullable();
+            $table->string('assignedby', 25)->nullable();
+            $table->string('edit_size_status', 20)->nullable()->default('Disabled');
+            $table->tinyInteger('tracking_status')->nullable()->default(1);
+            $table->string('qc_reject_part', 50)->nullable();
+            $table->string('by_fabric', 35)->nullable();
+            $table->string('gallery_images', 2000)->nullable();
+            $table->string('invoice_id', 50)->nullable();
+            $table->tinyInteger('free_gift')->nullable()->default(0);
+            $table->string('ship_invoice', 25)->nullable();
+            $table->tinyInteger('verify_order')->nullable()->default(0);
+            $table->string('verify_order_by', 25)->nullable();
+            $table->date('verify_order_date')->nullable();
+            $table->text('track_phone_date')->nullable();
+            $table->text('track_new_date')->nullable();
+            $table->text('track_bpu_date')->nullable();
+            $table->text('track_cc_date')->nullable();
+            $table->text('track_stitch_date')->nullable();
+            $table->text('track_finishing_date')->nullable();
+            $table->string('planning_comment', 250)->nullable();
+            $table->string('line_user', 35)->nullable();
+            $table->string('hscode_description', 250)->nullable();
+            $table->integer('igst_percent', false, true)->nullable();
+            $table->integer('rpu_extra_percent', false, true)->nullable();
+            $table->string('occassion_date', 50)->nullable();
+            $table->string('pending_reason', 150)->nullable();
+            $table->string('old_status', 100)->nullable();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('andaaz_inhouse_order_items');
+    }
+};

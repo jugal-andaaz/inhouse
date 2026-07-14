@@ -1,0 +1,121 @@
+/* ============================================================
+   FedEx module styles
+   ============================================================ */
+
+/* ── Shared (create-shipment page) ──────────────────────────── */
+.fedex-card-header      { font-size: 13px; }
+.col-form-label-sm      { font-size: 12px; font-weight: 600; }
+.form-control-sm        { font-size: 12px; }
+.header-subtitle        { opacity: .85; }
+.card-quick-ship                { border: 2px solid #28a745; }
+.card-quick-ship .card-header   { background: #28a745; font-size: 13px; }
+.qs-title                       { font-size: 15px; }
+.card-load-excel                { border: 2px solid #007bff; }
+.card-load-excel .card-header   { background: #007bff; font-size: 13px; }
+.btn-create-label               { background: #28a745; color: #fff; white-space: nowrap; padding: 7px 10px; }
+.btn-create-label:hover,
+.btn-create-label:focus         { background: #218838; color: #fff; }
+.ctrl-label                     { font-size: 13px; font-weight: 600; margin-bottom: 4px; display: block; }
+
+/* ── Full-page lavender background + watermark ───────────────── */
+.btn-outline-aux{border-color:#7e6005;color:#7e6005}
+.tbl-head th{background-color: #a54848 !important;}
+.bg-darkfedex{background: #737aa4 !important;}
+.fx-bg-wm {
+    position: fixed;
+    inset: 0;
+    background-color: #EDE8F5;
+    pointer-events: none;
+    user-select: none;
+    z-index: 0;
+    overflow: hidden;
+}
+
+.fx-bg-wm::after {
+    content: 'FedEx';
+    position: absolute;
+    top: 58%;
+    left: 55%;
+    transform: translate(-50%, -50%) rotate(-14deg);
+    font-size: 340px;
+    font-weight: 900;
+    font-style: italic;
+    letter-spacing: -12px;
+    color: #9B7EC8;
+    opacity: 0.28;
+    white-space: nowrap;
+    line-height: 1;
+}
+
+/* ── All page content sits above background ──────────────────── */
+.fx-watermark-card,
+.batch-status,
+.progress,
+#div_results,
+#div_progress {
+    position: relative;
+    z-index: 1;
+}
+
+/* ── Controls card — clean white ────────────────────────────── */
+.fx-watermark-card {
+    background: #fff;
+    border: 1px solid rgba(0,0,0,.08) !important;
+    overflow: hidden;
+}
+
+.fx-watermark-card .card-body {
+    position: relative;
+    z-index: 1;
+}
+
+/* ── FEDEX button — brand purple ─────────────────────────────── */
+.btn-fedex-purple {
+    background-color: #4D148C;
+    border-color:     #4D148C;
+    color: #fff;
+}
+.btn-fedex-purple:hover,
+.btn-fedex-purple:focus {
+    background-color: #3d0f72;
+    border-color:     #3d0f72;
+    color: #fff;
+}
+.btn-fedex-purple:disabled,
+.btn-fedex-purple.disabled {
+    background-color: #4D148C;
+    border-color:     #4D148C;
+    color: #fff;
+    opacity: .55;
+}
+
+/* ── CSB4 button — brand orange ──────────────────────────────── */
+.btn-csb4-orange {
+    background-color: #FF6200;
+    border-color:     #FF6200;
+    color: #fff;
+}
+.btn-csb4-orange:hover,
+.btn-csb4-orange:focus {
+    background-color: #e05500;
+    border-color:     #e05500;
+    color: #fff;
+}
+.btn-csb4-orange:disabled,
+.btn-csb4-orange.disabled {
+    background-color: #FF6200;
+    border-color:     #FF6200;
+    color: #fff;
+    opacity: .55;
+}
+
+/* ── Status / progress / table (existing) ────────────────────── */
+.batch-status           { font-size: 14px; }
+.batch-prog-meta        { font-size: 13px; }
+.batch-progress         { height: 22px; border-radius: 4px; }
+.batch-progress-bar     { font-size: 12px; line-height: 22px; }
+.batch-table            { font-size: 13px; }
+.batch-table .col-num   { width: 35px; }
+.batch-table .col-status{ width: 110px; }
+.err-detail             { font-size: 10px; word-break: break-word; }
+.spinner-xs             { width: .6rem; height: .6rem; }

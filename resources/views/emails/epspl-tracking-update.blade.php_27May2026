@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Shipment Update</title>
+</head>
+<body style="margin:0;padding:0;background:#f5f5f5;font-family:Arial,sans-serif;font-size:14px;color:#333;">
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f5f5f5;">
+<tr><td align="center" style="padding:24px 10px;">
+<table width="600" cellpadding="0" cellspacing="0" border="0">
+
+    {{-- Greeting --}}
+    <tr>
+        <td align="center" style="padding:0 0 16px;">
+            <p style="margin:0;font-size:18px;color:#333;">
+                <img src="https://inhouse.andaazfashion.com/assets/img/andaaz-fashion-logo.png"
+                     title="Andaaz Fashion Logo" alt="Andaaz Fashion Logo" width="170"
+                     style="display:block;margin:0 auto 12px;"/>
+                <br>
+                Hello <strong>{{ $orderItem->customer_name ?? $tracking->consignee ?? 'Customer' }}!</strong>
+            </p>
+        </td>
+    </tr>
+
+    {{-- Main Card --}}
+    <tr>
+        <td style="background:#fff;border-radius:6px;overflow:hidden;border:1px solid #e0e0e0;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+
+            {{-- Green Hero Banner --}}
+            @php
+                $isDeliveredStatus = in_array(strtoupper(trim($tracking->status ?? '')), ['DELIVERED', 'DL']);
+                $actualDate = $tracking->actual_delivery
+                    ? \Carbon\Carbon::parse($tracking->actual_delivery)->format('D, d M')
+                    : ($isDeliveredStatus ? \Carbon\Carbon::now()->format('D, d M') : null);
+                $estimatedDate = $tracking->estimated_delivery
+                    ? \Carbon\Carbon::parse($tracking->estimated_delivery)->format('D, d M')
+                    : null;
+                $bookingDate = $tracking->booking_date
+                    ? \Carbon\Carbon::parse($tracking->booking_date)->format('D, d M')
+                    : null;
+            @endphp
+
+            <tr>
+                <td style="background:#a10047;padding:24px 28px 0;">
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                        <tr>
+                            <td width="36" valign="top" style="padding-top:4px;">
+                                <table cellpadding="0" cellspacing="0" border="0">
+                                    <tr>
+                                        <td width="28" height="28" align="center" valign="middle"
+                                            style="background:#fff;border-radius:50%;font-size:16px;color:#a10047;font-weight:700;">
+                                            &#10003;
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td align="center">
+                                            <div style="width:2px;height:40px;background:rgba(255,255,255,0.5);margin:4px auto 0;border-left:2px dashed rgba(255,255,255,0.6);"></div>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </td>
+                            <td style="padding-left:14px;">
+                                @if($isDelivered)
+                                    @if($totalItems === 1 || $deliveredCount >= $totalItems)
+                                        {{-- All delivered --}}
+                                        <p style="margin:0;font-size:20px;color:#fff;line-height:1.3;">
+                                            Your Order Has Been <strong>Fully Delivered</strong> ✅
+                                        </p>
+                                        @if($actualDate)
+                                        <p style="margin:6px 0 0;font-size:12px;color:rgba(255,255,255,0.85);">on {{ $actualDate }}</p>
+                                        @endif
+                                        <p style="margin:10px 0 0;font-size:13px;color:rgba(255,255,255,0.9);">
+                                            All {{ $totalItems }} item{{ $totalItems > 1 ? 's' : '' }} from your order have been successfully delivered. We hope you enjoy your purchase!
+                                        </p>
+                                    @elseif($deliveredCount === 1)
+                                        {{-- First item of many --}}
+                                        <p style="margin:0;font-size:20px;color:#fff;line-height:1.3;">
+                                            Your Order Has Been <strong>Partially Delivered</strong>
+                                        </p>
+                                        @if($actualDate)
+                                        <p style="margin:6px 0 0;font-size:12px;color:rgba(255,255,255,0.85);">on {{ $actualDate }}</p>
+                                        @endif
+                                        <p style="margin:10px 0 0;font-size:13px;color:rgba(255,255,255,0.9);">
+                                            1 of {{ $totalItems }} items from your order has been delivered. Your remaining items are on their way!
+                                        </p>
+                                    @else
+                                        {{-- Middle deliveries --}}
+                                        <p style="margin:0;font-size:20px;color:#fff;line-height:1.3;">
+                                            <strong>Another Item</strong> from Your Order Has Been Delivered
+                                        </p>
+                                        @if($actualDate)
+                                        <p style="margin:6px 0 0;font-size:12px;color:rgba(255,255,255,0.85);">on {{ $actualDate }}</p>
+                                        @endif
+                                        <p style="margin:10px 0 0;font-size:13px;color:rgba(255,255,255,0.9);">
+                                            {{ $deliveredCount }} of {{ $totalItems }} items have now been delivered. We're still working on your remaining items.
+                                        </p>
+                                    @endif
+                                @else
+                                    <p style="margin:0;font-size:20px;color:#fff;line-height:1.3;">
+                                        Your Order Is <strong>On Its Way</strong>
+                                    </p>
+                                    <p style="margin:10px 0 0;font-size:13px;color:rgba(255,255,255,0.9);">
+                                        Your shipment is currently in transit. We'll notify you upon delivery.
+                                    </p>
+                                @endif
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+
+            {{-- Timeline Bar --}}
+            @if($bookingDate || $actualDate)
+            <tr>
+                <td style="background:#fff;border-bottom:1px solid #ebebeb;padding:12px 28px;">
+                    <table cellpadding="0" cellspacing="0" border="0">
+                        <tr>
+                            <td style="padding-right:8px;">
+                                <div style="width:10px;height:10px;border-radius:50%;background:#a10047;"></div>
+                            </td>
+                            <td style="font-size:13px;color:#555;">
+                                @if($isDelivered && $bookingDate && $actualDate)
+                                    Dispatched on
+                                    <span style="text-decoration:line-through;color:#999;">{{ $bookingDate }}</span>
+                                    &nbsp;<span style="color:#a10047;font-weight:700;">Delivered {{ $actualDate }}</span>
+                                @elseif($bookingDate)
+                                    Dispatched on <strong>{{ $bookingDate }}</strong>
+                                    @if($estimatedDate)
+                                        &nbsp;·&nbsp; Est. delivery: <strong>{{ $estimatedDate }}</strong>
+                                    @endif
+                                @elseif($actualDate)
+                                    Delivered on <span style="color:#a10047;font-weight:700;">{{ $actualDate }}</span>
+                                @endif
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+            @endif
+
+            {{-- Package Details --}}
+            <tr>
+                <td style="padding:20px 28px 16px;border-bottom:1px solid #ebebeb;">
+                    <p style="margin:0 0 12px;font-size:15px;font-weight:700;color:#333;">Package Details</p>
+                    <p style="margin:0 0 2px;font-size:11px;color:#999;">Your AWB No :</p>
+                    <p style="margin:0 0 0;font-size:18px;font-weight:700;color:#333;">{{ $tracking->tracking_number }}</p>
+                    @if($tracking->tracking_no && $tracking->tracking_no !== $tracking->tracking_number)
+                    <p style="margin:8px 0 0;font-size:11px;color:#999;">Tracking No :</p>
+                    <p style="margin:2px 0 0;font-size:15px;font-weight:600;color:#333;">{{ $tracking->tracking_no }}</p>
+                    @endif
+                </td>
+            </tr>
+
+            {{-- Order Items (all items for this order) --}}
+            @if($orderItems->isNotEmpty())
+                @foreach($orderItems as $loopItem)
+                @php
+                    $imgUrl = $loopItem->product_img ?? '';
+                    if ($imgUrl && !str_starts_with($imgUrl, 'http')) {
+                        $imgUrl = rtrim(config('app.url'), '/') . '/' . ltrim($imgUrl, '/');
+                    }
+                @endphp
+                <tr>
+                    <td style="padding:16px 28px;border-bottom:1px solid #ebebeb;">
+                        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                            <tr>
+                                {{-- Product Image --}}
+                                @if($imgUrl)
+                                <td width="80" valign="top" style="padding-right:16px;">
+                                    <img src="{{ $imgUrl }}"
+                                         width="80" height="100"
+                                         style="display:block;width:80px;height:100px;object-fit:cover;border-radius:4px;border:1px solid #e0e0e0;"
+                                         alt="{{ $loopItem->product_name ?? '' }}"/>
+                                </td>
+                                @endif
+
+                                {{-- Product Info --}}
+                                <td valign="top">
+                                    @if($loopItem->product_name)
+                                    <p style="margin:0 0 4px;font-size:14px;font-weight:700;color:#333;">
+                                        {{ $loopItem->product_name }}
+                                    </p>
+                                    @endif
+                                    <p style="margin:0 0 4px;font-size:12px;color:#777;">
+                                        SKU: {{ $loopItem->product_sku ?? '—' }}
+                                    </p>
+                                    <p style="margin:0 0 0;font-size:13px;color:#555;">
+                                        Qty: <strong>{{ (int)($loopItem->product_qty ?? 1) }}</strong>
+                                    </p>
+                                </td>
+
+                                {{-- Service / Origin — only on first item --}}
+                                @if($loop->first)
+                                <td width="120" valign="top" style="text-align:right;">
+                                    @if($tracking->service_type)
+                                    <p style="margin:0 0 2px;font-size:11px;color:#999;">Service</p>
+                                    <p style="margin:0 0 8px;font-size:12px;font-weight:700;color:#333;">{{ $tracking->service_type }}</p>
+                                    @endif
+                                    @if($tracking->origin)
+                                    <p style="margin:0 0 2px;font-size:11px;color:#999;">Origin</p>
+                                    <p style="margin:0;font-size:12px;font-weight:700;color:#333;">{{ $tracking->origin }}</p>
+                                    @endif
+                                </td>
+                                @else
+                                <td width="120"></td>
+                                @endif
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+                @endforeach
+            @else
+            {{-- Fallback if no order items found --}}
+            <tr>
+                <td style="padding:16px 28px;border-bottom:1px solid #ebebeb;">
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                        <tr>
+                            <td>
+                                <p style="margin:0 0 4px;font-size:14px;font-weight:700;color:#333;">Andaaz Fashion</p>
+                                <p style="margin:0 0 4px;font-size:13px;color:#555;">Order: <strong>{{ $tracking->order_id }}</strong></p>
+                                @if($tracking->product_sku)
+                                <p style="margin:0 0 4px;font-size:12px;color:#777;">SKU: {{ $tracking->product_sku }}</p>
+                                @endif
+                            </td>
+                            @if($tracking->service_type)
+                            <td style="text-align:right;vertical-align:top;">
+                                <p style="margin:0 0 2px;font-size:11px;color:#999;">Service</p>
+                                <p style="margin:0;font-size:12px;font-weight:700;color:#333;">{{ $tracking->service_type }}</p>
+                            </td>
+                            @endif
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+            @endif
+
+            {{-- Delivered At --}}
+            @if($tracking->consignee || $tracking->destination || ($orderItem?->customer_name))
+            <tr>
+                <td style="padding:16px 28px;border-bottom:1px solid #ebebeb;">
+                    <p style="margin:0 0 8px;font-size:15px;font-weight:700;color:#333;">
+                        {{ $isDelivered ? 'Delivered at' : 'Shipping To' }}
+                    </p>
+                    <p style="margin:0;font-size:13px;color:#555;line-height:1.6;">
+                        @php
+                            $recipientName = $tracking->consignee ?? $orderItem?->customer_name ?? null;
+                        @endphp
+                        @if($recipientName)
+                            <strong style="color:#333;">{{ $recipientName }}</strong>
+                            @if($tracking->destination), @endif
+                        @endif
+                        {{ $tracking->destination ?? '' }}
+                    </p>
+                </td>
+            </tr>
+            @endif
+
+            {{-- Footer Two Columns --}}
+            <tr>
+                <td style="padding:0;">
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                        <tr>
+                            <td width="50%" style="padding:18px 28px;border-right:1px solid #ebebeb;vertical-align:top;">
+                                <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#333;">Need help?</p>
+                                <p style="margin:0;font-size:13px;color:#555;">
+                                    For queries, or any assistance
+                                    <a href="mailto:support@andaazfashion.com" style="color:#a10047;text-decoration:none;font-weight:600;">contact us</a>
+                                </p>
+                            </td>
+                            <td width="50%" style="padding:18px 28px;vertical-align:top;">
+                                <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#333;">Order Info</p>
+                                <p style="margin:0;font-size:13px;color:#555;line-height:1.8;">
+                                    Order ID: <strong>{{ $tracking->order_id }}</strong><br/>
+                                    AWB: <strong>{{ $tracking->tracking_number }}</strong>
+                                </p>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+
+        </table>
+        </td>
+    </tr>
+
+    {{-- Bottom Note --}}
+    <tr>
+        <td align="center" style="padding:16px 10px;">
+            <p style="margin:0;font-size:11px;color:#aaa;">
+                This is an automated notification from Andaaz Fashion. Please do not reply to this email.
+            </p>
+        </td>
+    </tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>

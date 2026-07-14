@@ -1,0 +1,67 @@
+<?php
+
+// Path to the CSV file
+$csvFile = 'eshakti.csv';
+
+// Directory to save downloaded images
+$baseDir = __DIR__ . '/download_images/';
+
+// Function to download an image
+function downloadImage($url, $savePath) {
+    try {
+        if ($url) {
+            $imageData = file_get_contents($url);
+
+            if ($imageData === false) {
+                throw new Exception("Failed to download: $url");
+            }
+// Ensure the base directory exists
+                        $dir = dirname($savePath);
+            if (!file_exists($dir)) {
+                mkdir($dir, 0777, true);
+            }
+            // Save the image
+            file_put_contents($savePath, $imageData);
+            echo "Downloaded: $url to $savePath\n";
+        }
+    } catch (Exception $e) {
+        echo "Error: " . $e->getMessage() . "\n";
+    }
+}
+
+// Open and parse the CSV file
+if (($handle = fopen($csvFile, 'r')) !== false) {
+    // Skip the header row
+    fgetcsv($handle);
+
+    while (($data = fgetcsv($handle, 1000, ',')) !== false) {
+        $url = $data[0];
+        // Create category directory if it doesn't exist
+        $pathArray = array_reverse(explode('/', $data[0]));
+        if (isset($pathArray[1])) {
+            $img = $pathArray[1];
+        } else {
+            $img = $pathArray[0];
+        }
+        $newPath = explode('?', $img);
+        $categoryDir = $baseDir;
+
+        if (!file_exists($categoryDir)) {
+            mkdir($categoryDir, 0777, true);
+        }
+
+        // Extract the file name from the URL
+        $fileName = basename(parse_url($url, PHP_URL_PATH));
+
+        // Set the save path
+        $savePath = $categoryDir .$newPath[0] .'/'. urldecode($fileName);
+
+        // Download the image
+        downloadImage($url, $savePath);
+    }
+
+    fclose($handle);
+    echo "Image download completed.\n";
+} else {
+    echo "Failed to open CSV file: $csvFile\n";
+}

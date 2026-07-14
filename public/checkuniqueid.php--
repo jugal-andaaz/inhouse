@@ -1,0 +1,111 @@
+<?php
+// import_csv.php
+
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
+$host = 'localhost';
+$db   = 'inhouse_db';
+$user = 'inhouse_user';
+$pass = '{f4[n;wM626!wIZ,0a!9';
+$charset = 'utf8mb4';
+
+$dsn = "mysql:host=$host;dbname=$db;charset=$charset";
+
+$options = [
+    PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+];
+
+try {
+    $pdo = new PDO($dsn, $user, $pass, $options);
+    echo "Database connected successfully.\n";
+
+    $csvFile = __DIR__ . '/MeasurementDataSheet.csv';
+    echo "CSV file path: $csvFile\n";
+
+    if (!file_exists($csvFile)) {
+        die("CSV file not found at $csvFile");
+    }
+
+    if (($handle = fopen($csvFile, 'r')) !== false) {
+        $header = null;
+        $updatedCount = 0;
+
+        while (($row = fgetcsv($handle, 1000, ",", '"', "\\")) !== false) {
+            /*if (!$header) {
+                $header = $row;
+                echo "CSV header: " . implode(", ", $header) . "\n";
+                continue;
+            }*/
+
+            //$data = array_combine($header, $row);
+
+            $uniqueId = $row[0] ?? null;
+            $subStatus = "Shipped";
+            $ShippingNo = $row[1] ?? null;
+
+            if (!empty($uniqueId) && isset($subStatus)) {
+                echo "Processing unique_id = $uniqueId, sub_status = $subStatus\n";
+
+                // SELECT with placeholders and condition for shipped_number
+                $stmt = $pdo->prepare("
+                    SELECT * FROM appsheet_to_inhouse 
+                    WHERE unique_id = :unique_id 
+                    AND sub_status_status != :sub_status_status
+                    AND (shipped_number = '' OR shipped_number IS NULL)
+                ");
+                $stmt->execute([
+                    'unique_id' => $uniqueId,
+                    'sub_status_status' => $subStatus
+                ]);
+
+                $record = $stmt->fetch();
+
+                if ($record) { 
+                    echo "Record found, updating...\n";
+
+                    $update = $pdo->prepare("
+                        UPDATE appsheet_to_inhouse 
+                        SET shipped_number = $ShippingNo
+                        WHERE unique_id = :unique_id
+                        ");
+                    $update->execute([
+                        'unique_id' => $uniqueId 
+                    ]);
+                    $update = $pdo->prepare("
+                        UPDATE appsheet_to_inhouse 
+                        SET sub_status_status = 'Shipped'
+                        WHERE unique_id = :unique_id
+                        ");
+                    $update->execute([
+                        'unique_id' => $uniqueId 
+                    ]);
+                    /*$update = $pdo->prepare("
+                        UPDATE appsheet_to_inhouse 
+                        SET sub_status_status = $subStatus
+                        WHERE unique_id = :unique_id
+                        ");
+                    $update->execute([
+                        'unique_id' => $uniqueId
+                    ]);*/
+
+                    $updatedCount++;
+                    echo "Updated unique_id {$uniqueId} with new status '{$subStatus}'\n";
+                } 
+            } else {
+                echo "Skipping row due to missing data.\n";
+            }
+        }
+        fclose($handle);
+
+        echo "Finished. Total records updated: $updatedCount\n";
+    } else {
+        die("Failed to open CSV file.");
+    }
+} catch (PDOException $e) {
+    die("Database error: " . $e->getMessage());
+} catch (Exception $e) {
+    die("General error: " . $e->getMessage());
+}

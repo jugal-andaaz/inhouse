@@ -1,0 +1,1064 @@
+@extends('layouts.app')
+
+@section('page-title', 'Generate FedEx Shipping Labels')
+@section('page-heading', 'Generate FedEx Shipping Labels')
+<link rel="stylesheet" href="{{ asset('assets/css/orderdetails.css') }}" media="all" type="text/css">
+@section('breadcrumbs')
+    <li class="breadcrumb-item active">FedEx Labels</li>
+@endsection
+
+@section('styles')
+<link rel="stylesheet" href="{{ url('assets/css/fedex.css') }}">
+@endsection
+
+@section('content')
+
+{{-- Full-page FedEx watermark (behind all content) --}}
+<div class="fx-bg-wm" aria-hidden="true"></div>
+
+{{-- Controls --}}
+<div class="card mb-4 shadow-sm fx-watermark-card">
+    <div class="card-body">
+        <div class="row align-items-end">
+            <div class="col-md-3" style="display: none;">
+                <label class="ctrl-label">Service Type</label>
+                <select id="sel_service" class="form-control">
+                    @foreach($serviceTypes as $val => $lbl)
+                        <option value="{{ $val }}" {{ $val === 'FEDEX_INTERNATIONAL_PRIORITY' ? 'selected' : '' }}>{{ $lbl }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="col-md-3" style="display: none;">
+                <label class="ctrl-label">Pickup Type</label>
+                <select id="sel_pickup" class="form-control">
+                    @foreach($pickupTypes as $val => $lbl)
+                        <option value="{{ $val }}">{{ $lbl }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="col-md-4 mt-3 mt-md-0">
+                <div class="btn-group btn-group-lg w-100" role="group">
+                    <button id="btn_fedex" class="btn btn-fedex-purple font-weight-bold" style="flex:1">
+                        <span class="btn-icon-f">&#9889;</span>
+                        <span class="btn-label-f"> FEDEX - CSB5</span>
+                        <span class="btn-spinner-f spinner-border spinner-border-sm ml-1 d-none" role="status"></span>
+                    </button>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <label class="ctrl-label">Ship Date</label>
+                <input type="date" id="inp_date" class="form-control" value="{{ date('Y-m-d') }}">
+            </div>
+            <div class="col-md-4 mt-3 mt-md-0">
+                <div class="btn-group btn-group-lg w-100" role="group">
+                    <button id="btn_csb4" class="btn btn-csb4-orange font-weight-bold" style="flex:1">
+                        <span class="btn-icon-c">&#9889;</span>
+                        <span class="btn-label-c"> FEDEX - CSB4</span>
+                        <span class="btn-spinner-c spinner-border spinner-border-sm ml-1 d-none" role="status"></span>
+                    </button>
+                </div>
+            </div>
+            <div id="div_tally" class="col-md-auto mt-3 mt-md-10 d-none">
+                <a id="btn_tally_xls" href="{{ route('fedex.batch.tally.export') }}" class="btn btn-outline-secondary btn-lg btn-block font-weight-bold" title="Download Tally Upload XLS for processed shipments">
+                    &#8681; FedEx AWB Data - Download
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- Status bar --}}
+<div id="div_status" class="alert alert-info d-none mb-3 batch-status">
+    <strong id="status_text">Ready</strong>
+</div>
+
+{{-- Progress --}}
+<div id="div_progress" class="d-none mb-3">
+    <div class="d-flex justify-content-between mb-1 batch-prog-meta">
+        <span id="prog_label">Starting…</span>
+        <strong id="prog_fraction">0 / 0</strong>
+    </div>
+    <div class="progress batch-progress">
+        <div id="prog_bar" class="progress-bar bg-success progress-bar-striped progress-bar-animated batch-progress-bar"
+             style="width:0%;" role="progressbar">0%</div>
+    </div>
+</div>
+
+{{-- Results table --}}
+<div id="div_results" class="d-none">
+    <div class="card shadow-sm">
+        <div class="card-header bg-darkfedex text-white d-flex justify-content-between">
+            <strong>Shipment Results</strong>
+            <span>
+                <span id="badge_done" class="badge badge-success mr-1">0 done</span>
+                <span id="badge_skip" class="badge badge-info mr-1 d-none">0 skipped</span>
+                <span id="badge_err"  class="badge badge-danger d-none">0 errors</span>
+            </span>
+        </div>
+        <table class="table table-sm table-hover mb-0 batch-table">
+            <thead class="tbl-head">
+                <tr>
+                    <th class="col-num">#</th>
+                    <th>Invoice No.</th>
+                    <th>Recipient</th>
+                    <th>Country</th>
+                    <th>Tracking No.</th>
+                    <th>Print / Download</th>
+                    <th class="col-status">Status</th>
+                </tr>
+            </thead>
+            <tbody id="tbl_body"></tbody>
+        </table>
+    </div>
+</div>
+
+@endsection
+
+@section('scripts')
+{{-- QZ Tray + JSZip: served locally, no CDN dependency --}}
+<script src="{{ url('assets/js/qz-tray.js') }}"></script>
+<script src="{{ url('assets/js/jszip.min.js') }}"></script>
+<script>
+(function () {
+    'use strict';
+
+    /* ── Zebra ZP505 (P/N ZP505-0503-0G21) ────────────────────────────────────
+       QZ Tray finds printers by partial name match (case-insensitive contains).
+       We try multiple patterns so the code works regardless of how the Windows
+       driver was installed. _zebraPrinterName is cached after first discovery.  */
+    var ZEBRA_PATTERNS    = ['Zebra ZP 500 (ZPL)', 'ZP 500', 'Zebra ZP', 'Zebra'];
+    var _zebraPrinterName   = null; // cached after first lookup
+    var _defaultPrinterName = null; // cached after first lookup (for invoice A4 printer)
+
+    async function _findZebraPrinter() {
+        if (_zebraPrinterName) return _zebraPrinterName;
+        for (var i = 0; i < ZEBRA_PATTERNS.length; i++) {
+            try {
+                var found = await qz.printers.find(ZEBRA_PATTERNS[i]);
+                _zebraPrinterName = found;
+                console.log('[FedEx] Zebra printer found:', found);
+                return found;
+            } catch (e) { /* not found under this pattern, try next */ }
+        }
+        console.warn('[FedEx] No Zebra printer found. Tried:', ZEBRA_PATTERNS.join(', '));
+        return null;
+    }
+
+    /* ── Batch file storage ─────────────────────────────────────────────────────
+       Primary : File System Access API  → real folder on Desktop
+       Fallback: JSZip                   → FedEx_TIMESTAMP.zip in Downloads
+       Ultimate: individual blob downloads if both above fail                   */
+    var _saveDir      = null;  // FileSystemDirectoryHandle for the dated subfolder
+    var _batchZip     = null;  // JSZip instance — always created as safety net
+    var _zipHasFiles  = false; // true when at least one file was added to ZIP
+    var _batchTs      = '';
+    var _allSaveTasks = [];    // collect all _saveFile promises so we can await them before ZIP
+
+    /* ── DOM refs ── */
+    const btnFedex   = document.getElementById('btn_fedex');
+    const btnCsb4    = document.getElementById('btn_csb4');
+    const divStatus  = document.getElementById('div_status');
+    const statusText = document.getElementById('status_text');
+    const divProg    = document.getElementById('div_progress');
+    const progLabel  = document.getElementById('prog_label');
+    const progFrac   = document.getElementById('prog_fraction');
+    const progBar    = document.getElementById('prog_bar');
+    const divResults = document.getElementById('div_results');
+    const tblBody    = document.getElementById('tbl_body');
+    const badgeDone  = document.getElementById('badge_done');
+    const badgeSkip  = document.getElementById('badge_skip');
+    const badgeErr   = document.getElementById('badge_err');
+
+    let cntDone = 0, cntSkip = 0, cntErr = 0;
+
+    /* Shared window for PDF printing. Must be opened synchronously inside the
+       click handler (before any await) — Chrome blocks window.open after async ops. */
+    let _pdfPrintWin = null;
+
+    /* Cached FileSystemDirectoryHandle — loaded once on page init from IndexedDB.
+       Holding it in memory lets us call requestPermission() synchronously inside
+       the click handler (before any await), keeping the user-gesture context alive. */
+    var _baseHandleCache = null;
+
+    /* ── IndexedDB helpers — persist chosen Desktop folder across sessions ─────
+       First run: shows folder picker once. All future runs: fully automatic.    */
+    function _idbOpen() {
+        return new Promise(function (resolve, reject) {
+            var r = indexedDB.open('fedex_fs', 1);
+            r.onupgradeneeded = function (e) { e.target.result.createObjectStore('h'); };
+            r.onsuccess  = function (e) { resolve(e.target.result); };
+            r.onerror    = function ()  { reject(); };
+        });
+    }
+    async function _idbGet(key) {
+        try {
+            var db = await _idbOpen();
+            return new Promise(function (resolve) {
+                var tx = db.transaction('h', 'readonly');
+                var q  = tx.objectStore('h').get(key);
+                q.onsuccess = function () { resolve(q.result || null); };
+                q.onerror   = function () { resolve(null); };
+            });
+        } catch (e) { return null; }
+    }
+    async function _idbSet(key, val) {
+        try {
+            var db = await _idbOpen();
+            return new Promise(function (resolve) {
+                var tx = db.transaction('h', 'readwrite');
+                tx.objectStore('h').put(val, key);
+                tx.oncomplete = resolve;
+                tx.onerror    = resolve;
+            });
+        } catch (e) {}
+    }
+    /* Preload the stored handle on page init so the click handler can call
+       requestPermission() synchronously (before any await) where the user gesture
+       is still active — Chrome blocks requestPermission after async operations. */
+    if (window.showDirectoryPicker) {
+        _idbGet('base_dir').then(function (h) { _baseHandleCache = h; });
+    }
+
+    /* ── Main click — shared handler for both buttons ── */
+    var _successInvoices = [];
+
+    async function handleBatchClick(sheetType) {
+        cntDone = 0; cntSkip = 0; cntErr = 0;
+        _successInvoices = [];
+        tblBody.innerHTML = '';
+
+        /* window.open must be called synchronously (user gesture). */
+        if (_pdfPrintWin && !_pdfPrintWin.closed) _pdfPrintWin.close();
+        _pdfPrintWin = window.open('about:blank', 'fedex_pdf_print',
+            'width=900,height=700,left=100,top=50');
+        if (_pdfPrintWin) {
+            _pdfPrintWin.document.write(
+                '<!DOCTYPE html><html><head><title>FedEx Print</title>'
+                + '<style>'
+                + 'body{margin:0;font-family:sans-serif;display:flex;align-items:center;'
+                + 'justify-content:center;min-height:100vh;background:#f0f4f8}'
+                + '.box{text-align:center;color:#555;padding:40px;max-width:400px}'
+                + 'h3{color:#333;margin:0 0 10px;font-size:1.2rem}'
+                + 'p{margin:0;font-size:13px;line-height:1.6}'
+                + '</style></head><body>'
+                + '<div class="box">'
+                + '<h3>FedEx Print Window</h3>'
+                + '<p>Shipment documents will appear here automatically for printing.<br>'
+                + '<strong>Do not close this window</strong> until the batch is complete.</p>'
+                + '</div></body></html>'
+            );
+            _pdfPrintWin.document.close();
+        }
+
+        _batchTs      = _nowStamp();
+        _saveDir      = null;
+        _zipHasFiles  = false;
+        _allSaveTasks = [];
+        /* Always create ZIP as safety net — if folder write fails, files go here */
+        _batchZip = window.JSZip ? new JSZip() : null;
+
+        /* ── Folder setup ────────────────────────────────────────────────────────────
+           _baseHandleCache was loaded from IndexedDB on page init (fast, no await).
+           Calling requestPermission() synchronously here (before any await) keeps the
+           user-gesture context alive — Chrome blocks it after async operations.
+
+           Path A: cached handle + auto-granted → zero dialog, folder created silently.
+           Path B: cached handle + needs confirm → Chrome shows small "Allow" bar.
+           Path C: no cache or denied → full folder picker opens at last location.
+           Path D: picker cancelled / API unavailable → ZIP-only fallback.            */
+        if (window.showDirectoryPicker) {
+            var _permPromise = _baseHandleCache
+                ? _baseHandleCache.requestPermission({ mode: 'readwrite' })
+                      .catch(function () { return 'denied'; })
+                : Promise.resolve('denied');
+
+            var _permResult = await _permPromise;
+            var _baseDir    = (_permResult === 'granted') ? _baseHandleCache : null;
+
+            if (!_baseDir) {
+                try {
+                    _baseDir = await window.showDirectoryPicker({
+                        startIn: _baseHandleCache || 'desktop',
+                        mode:    'readwrite',
+                    });
+                    _baseHandleCache = _baseDir;
+                    await _idbSet('base_dir', _baseDir);
+                } catch (e) { _baseDir = null; }
+            }
+
+            if (_baseDir) {
+                try {
+                    _saveDir = await _baseDir.getDirectoryHandle(
+                        'FedEx_' + _batchTs, { create: true }
+                    );
+                } catch (e) { _saveDir = null; }
+            }
+        }
+
+        setLoading(true);
+        setStatus('info', 'Connecting to server and reading Excel file…');
+        showProgress(false);
+        divResults.classList.remove('d-none');
+
+        /* Step 1: fetch all rows for the chosen sheet */
+        let rows;
+        try {
+            const res = await get('/fedex/batch/rows?sheet=' + sheetType + '&t=' + Date.now());
+            rows = res;
+        } catch (err) {
+            setStatus('danger', 'Failed to read Excel rows: ' + err.message);
+            setLoading(false);
+            if (_pdfPrintWin && !_pdfPrintWin.closed) _pdfPrintWin.close();
+            return;
+        }
+
+        if (!rows.length) {
+            setStatus('warning', 'No rows with invoice numbers found in the Excel file.');
+            setLoading(false);
+            if (_pdfPrintWin && !_pdfPrintWin.closed) _pdfPrintWin.close();
+            return;
+        }
+
+        const pending = rows.filter(r => !r.already_done);
+        const skipped = rows.filter(r =>  r.already_done);
+
+        /* Pre-fill already-done rows with stored tracking + buttons */
+        skipped.forEach((r, i) => {
+            const trId = addRow(i + 1, r, 'skipped');
+            if (r.tracking || r.label_url || r.auxiliary_url || r.invoice_pdf_url) {
+                rowDone(trId, r, true);
+            }
+        });
+        cntSkip = skipped.length;
+        updateBadges();
+
+        if (!pending.length) {
+            setStatus('success', 'All ' + rows.length + ' rows have already been processed.');
+            setLoading(false);
+            showTallyButton();
+            if (_pdfPrintWin && !_pdfPrintWin.closed) _pdfPrintWin.close();
+            return;
+        }
+
+        showProgress(true);
+        setStatus('info', 'Processing ' + pending.length + ' shipment(s)…');
+
+        /* Warm up QZ Tray: connect + cache both printer names before first print job */
+        if (window.qz) _qzConnect().then(function(c) {
+            if (!c) return;
+            _findZebraPrinter(); // cache Zebra name
+            qz.printers.getDefault().then(function(p) { _defaultPrinterName = p; }); // cache default
+        });
+
+        /* Step 2: pipeline — server processes rows sequentially; prints run in parallel.
+           _printChain is a promise chain that ensures label1→aux1→inv1→label2→… order
+           while blob fetches start the moment processRow returns (overlap with next row). */
+        var _printChain = Promise.resolve();
+
+        for (let i = 0; i < pending.length; i++) {
+            const row = pending[i];
+            const rowNum = skipped.length + i + 1;
+            const trId   = addRow(rowNum, row, 'processing');
+
+            setProgress(i, pending.length, 'Processing ' + (i + 1) + ' / ' + pending.length + ': ' + row.invoice_number + ' (' + (row.recipient || '') + ')');
+
+            try {
+                const result = await post('/fedex/batch/process', {
+                    invoice_number: row.invoice_number,
+                    service_type:   document.getElementById('sel_service').value,
+                    pickup_type:    document.getElementById('sel_pickup').value,
+                    ship_date:      document.getElementById('inp_date').value,
+                    batch_reset:    (i === 0),
+                });
+
+                rowDone(trId, result);
+                cntDone++;
+                if (result.invoice_number) {
+                    _successInvoices.push(result.invoice_number);
+                }
+
+                const inv = (result.invoice_number || '').replace(/[^A-Za-z0-9_\-]/g, '_');
+                const printItems = [
+                    result.label_url       ? { url: result.label_url,       dname: inv + '_LABEL'   + extFrom(result.label_url) }   : null,
+                    result.auxiliary_url   ? { url: result.auxiliary_url,   dname: inv + '_AUX'     + extFrom(result.auxiliary_url) } : null,
+                    result.invoice_pdf_url ? { url: result.invoice_pdf_url, dname: inv + '_INVOICE.pdf' }                            : null,
+                ].filter(Boolean);
+
+                /* Fetch all blobs NOW — runs while the NEXT row is being processed on server.
+                   15s hard timeout prevents expired/slow CDN URLs from freezing the chain. */
+                const rowBlobsP = Promise.all(printItems.map(async function(it) {
+                    try {
+                        var ctrl = new AbortController();
+                        var tid  = setTimeout(function() { ctrl.abort(); }, 15000);
+                        var r = await fetch(it.url, { credentials: 'same-origin', signal: ctrl.signal });
+                        clearTimeout(tid);
+                        return r.ok ? { item: it, blob: await r.blob() } : null;
+                    } catch(e) { return null; }
+                }));
+
+                /* Chain onto previous row's prints — guarantees strict document order:
+                   Label → AUX (single Zebra job) → Invoice (sequential, not parallel).
+                   .catch() isolates each row so a failure here never kills later rows. */
+                _printChain = _printChain.then(async function() {
+                    var ready = (await rowBlobsP).filter(Boolean);
+                    if (!ready.length) return;
+
+                    // Split by type — URLs are local paths ending in .png / .pdf
+                    var pngs = ready.filter(function(r) { return !/\.pdf$/i.test(r.item.url); });
+                    var pdfs = ready.filter(function(r) { return  /\.pdf$/i.test(r.item.url); });
+
+                    // Convert ALL blobs to base64 simultaneously (label, AUX, invoice in one go)
+                    var allBlobs = pngs.concat(pdfs).map(function(r) { return r.blob; });
+                    var allB64s  = await Promise.all(allBlobs.map(_blobToBase64));
+                    var pngB64s  = allB64s.slice(0, pngs.length);
+                    var pdfB64s  = allB64s.slice(pngs.length);
+
+                    // Save files in BACKGROUND — don't block printing, but track promises
+                    // so we can await them all before ZIP generation at the end
+                    _allSaveTasks.push(Promise.all(ready.map(function(r) { return _saveFile(r.item.dname, r.blob); })));
+
+                    // Guaranteed sequence: Label+AUX on Zebra FIRST, Invoice AFTER
+                    var zebraOk   = pngs.length ? await _printPNGsBatchViaQZ(pngs.map(function(r){return r.blob;}), pngB64s) : true;
+                    var invoiceOk = pdfs.length ? await _printInvoiceViaQZ(pdfs[0].blob, pdfB64s[0]) : true;
+
+                    // Fallback: Zebra QZ failed → shared window per PNG
+                    if (!zebraOk && pngs.length) {
+                        try {
+                            for (var k = 0; k < pngs.length; k++) {
+                                await new Promise(function(resolve) { _printInSharedWin(pngs[k].item, resolve); });
+                            }
+                        } catch(fe) { console.warn('[FedEx] PNG fallback error:', fe.message || fe); }
+                    }
+
+                    // Fallback: invoice QZ failed → blob-URL popup
+                    if (!invoiceOk && pdfs.length) {
+                        try {
+                            var _invBlob = pdfs[0].blob;
+                            await new Promise(function(resolve) {
+                                var win = _pdfPrintWin;
+                                if (!win || win.closed) { resolve(); return; }
+                                var done = false;
+                                var finish = function() { if (!done) { done = true; resolve(); } };
+                                var bridge  = '__pw_' + (++_pwSeq);
+                                var blobUrl = URL.createObjectURL(_invBlob);
+                                window[bridge] = function() { delete window[bridge]; URL.revokeObjectURL(blobUrl); finish(); };
+                                win.document.open();
+                                win.document.write(
+                                    '<!DOCTYPE html><html><head><style>'
+                                    + '*{margin:0;padding:0;box-sizing:border-box}'
+                                    + 'html,body{width:100%;height:100vh;overflow:hidden}'
+                                    + 'iframe{display:block;width:100%;height:100vh;border:none}'
+                                    + '</style></head><body>'
+                                    + '<iframe src="' + blobUrl + '" id="pf"></iframe>'
+                                    + '<script>(function(){'
+                                    + 'var dn=false;'
+                                    + 'function done(){if(dn)return;dn=true;try{window.opener["' + bridge + '"]();}catch(e){}}'
+                                    + 'document.getElementById("pf").addEventListener("load",function(){'
+                                    + 'setTimeout(function(){window.addEventListener("afterprint",done,{once:true});window.print();},200);});'
+                                    + 'setTimeout(done,4000);'
+                                    + '}())<\/script></body></html>'
+                                );
+                                win.document.close(); win.focus();
+                                setTimeout(function() { if (window[bridge]) delete window[bridge]; if (!done) finish(); }, 5000);
+                            });
+                        } catch(fe) { console.warn('[FedEx] invoice fallback error:', fe.message || fe); }
+                    }
+                }).catch(function(e) {
+                    console.warn('[FedEx] print chain step failed (row skipped):', e.message || e);
+                });
+
+            } catch (err) {
+                rowError(trId, err.message);
+                cntErr++;
+            }
+
+            updateBadges();
+            setProgress(i + 1, pending.length, null);
+        }
+
+        /* All rows submitted to server — wait for the print pipeline to drain */
+        setStatus('info', '<span class="spinner-border spinner-border-sm mr-1"></span> Shipments created — printing remaining labels…');
+        await _printChain;
+
+        /* Wait for all background file saves to complete before checking ZIP.
+           Without this, _zipHasFiles may still be false when folder writes are
+           still pending — causing the ZIP to silently never download. */
+        await Promise.all(_allSaveTasks);
+
+        /* Done */
+        progBar.classList.remove('progress-bar-animated');
+        const summary = cntDone + ' label(s) generated' +
+            (cntSkip ? ', ' + cntSkip + ' skipped' : '') +
+            (cntErr  ? ', ' + cntErr  + ' error(s)' : '');
+        setStatus(cntErr ? 'warning' : 'success', '&#10003; Finished — ' + summary);
+        setLoading(false);
+        document.getElementById('div_tally').classList.remove('d-none');
+
+        /* Download ZIP if files were queued (no folder selected, or folder writes failed) */
+        if (_zipHasFiles && _batchZip) {
+            _batchZip.generateAsync({ type: 'blob' }).then(function (zipBlob) {
+                _blobDownload('FedEx_' + _batchTs + '.zip', zipBlob);
+            });
+        } else if (_saveDir && cntDone > 0) {
+            /* Files went to Desktop folder — tell the user where they are */
+            var folderName = 'FedEx_' + _batchTs;
+            setStatus(cntErr ? 'warning' : 'success',
+                '&#10003; Finished — ' + summary + '. Files saved to <strong>' + folderName + '</strong> folder on Desktop.');
+        }
+
+        /* Print pipeline already drained — close window immediately */
+        if (_pdfPrintWin && !_pdfPrintWin.closed) _pdfPrintWin.close();
+    }
+
+    function showTallyButton() {
+        var baseUrl = '{{ route('fedex.batch.tally.export') }}';
+        var link = document.getElementById('btn_tally_xls');
+        if (_successInvoices.length > 0) {
+            link.href = baseUrl + '?invoices=' + encodeURIComponent(_successInvoices.join(','));
+        } else {
+            link.href = baseUrl;
+        }
+        document.getElementById('div_tally').classList.remove('d-none');
+    }
+
+    /* ── HTTP helpers ── */
+    async function get(url) {
+        const res = await fetch(url, {
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.error || ('HTTP ' + res.status));
+        return body;
+    }
+
+    async function post(url, data) {
+        const csrf = document.querySelector('meta[name="csrf-token"]');
+        const res  = await fetch(url, {
+            method:      'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type':  'application/json',
+                'Accept':        'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN':  csrf ? csrf.content : '',
+            },
+            body: JSON.stringify(data),
+        });
+        const text = await res.text();
+        let body = {};
+        try { body = JSON.parse(text); } catch (e) { body = { error: 'HTTP ' + res.status + ': ' + text.substring(0, 300) }; }
+        if (!res.ok) throw new Error(body.error || ('HTTP ' + res.status));
+        return body;
+    }
+
+    /* ── Table helpers ── */
+    let rowSeq = 0;
+    function addRow(num, row, status) {
+        const id = 'tr_' + (rowSeq++);
+        const tr = document.createElement('tr');
+        tr.id = id;
+        tr.innerHTML =
+            '<td class="text-center text-muted">' + num + '</td>' +
+            '<td class="font-weight-bold">' + esc(row.invoice_number) + '</td>' +
+            '<td>' + esc(row.recipient || '') + '</td>' +
+            '<td>' + esc(row.country || '') + '</td>' +
+            '<td class="td-track">—</td>' +
+            '<td class="td-print">—</td>' +
+            '<td class="td-status">' + badge(status) + '</td>';
+        tblBody.appendChild(tr);
+        tr.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        return id;
+    }
+
+    function rowDone(id, result, keepBadge) {
+        const tr = document.getElementById(id);
+        if (!tr) return;
+        tr.querySelector('.td-track').textContent = result.tracking || '—';
+        const inv  = (result.invoice_number || '').replace(/[^A-Za-z0-9_\-]/g, '_');
+        const btns = [];
+        if (result.invoice_pdf_url) btns.push(ptdBtn(result.invoice_pdf_url, inv + '_INVOICE.pdf',                          'btn-outline-secondary',    'Invoice'));
+        if (result.label_url)       btns.push(ptdBtn(result.label_url,       inv + '_LABEL' + extFrom(result.label_url),     'btn-outline-primary ml-1', 'Label'));
+        if (result.auxiliary_url)   btns.push(ptdBtn(result.auxiliary_url,   inv + '_AUX'   + extFrom(result.auxiliary_url), 'btn-outline-warning btn-outline-aux ml-1', 'Auxiliary'));
+        tr.querySelector('.td-print').innerHTML = btns.join('') || '—';
+        if (!keepBadge) {
+            tr.querySelector('.td-status').innerHTML = badge('done');
+            tr.classList.add('table-success');
+        }
+    }
+
+    /* Build a print-then-download button using data attributes to avoid quoting issues */
+    function ptdBtn(url, dname, cls, label) {
+        return '<button class="btn btn-sm ' + cls + ' btn-ptd"'
+            + ' data-url="' + esc(url) + '"'
+            + ' data-dname="' + esc(dname) + '">'
+            + label + '</button>';
+    }
+
+    function directDownload(url, dname) {
+        const a = document.createElement('a');
+        a.href     = url;
+        a.download = dname;
+        a.rel      = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+
+    /* Button click: open the print window IMMEDIATELY (preserves user-gesture so
+       Chrome doesn't block it), then fetch content and write into the open window. */
+    async function printThenDownload(url, dname) {
+        /* Detect type from URL, not dname — dname is display-only and may be wrong */
+        const isPng = /\.png$/i.test(url);
+
+        /* Open window synchronously — must happen before any await */
+        const win = window.open('about:blank', '_blank');
+        if (!win) {
+            alert('Popups are blocked. Please allow popups for this site and try again.');
+            return;
+        }
+        win.document.write('<p style="font-family:sans-serif;padding:20px;">Loading…</p>');
+
+        let blob;
+        try {
+            const res = await fetch(url, { credentials: 'same-origin' });
+            if (!res.ok) {
+                win.close();
+                const msg = res.status === 410
+                    ? 'Label URL has expired. Please re-run the batch to get a fresh label.'
+                    : 'Could not load label (HTTP ' + res.status + '). Please re-run the batch.';
+                alert(msg);
+                return;
+            }
+            blob = await res.blob();
+        } catch (e) {
+            win.close();
+            alert('Failed to load label: ' + e.message);
+            return;
+        }
+
+        /* Named download via blob URL — guarantees dname is used as filename */
+        var dlUrl = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = dlUrl; a.download = dname;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(dlUrl); }, 5000);
+
+        /* Print into the already-open window */
+        if (isPng || blob.type === 'image/png') {
+            printPngInWindow(blob, win);
+        } else {
+            printPdfInWindow(url, win);
+        }
+    }
+
+    /* Delegated click handler for all print-then-download buttons */
+    tblBody.addEventListener('click', function (e) {
+        const btn = e.target.closest('.btn-ptd');
+        if (!btn) return;
+        printThenDownload(btn.dataset.url, btn.dataset.dname);
+    });
+
+    function rowError(id, msg) {
+        const tr = document.getElementById(id);
+        if (!tr) return;
+        tr.querySelector('.td-status').innerHTML =
+            '<span class="badge badge-danger">Error</span><br>' +
+            '<small class="text-danger err-detail">' + esc(msg.substring(0, 300)) + '</small>';
+        tr.classList.add('table-danger');
+    }
+
+    function badge(s) {
+        if (s === 'processing') return '<span class="badge badge-secondary"><span class="spinner-border spinner-xs"></span> Processing…</span>';
+        if (s === 'done')       return '<span class="badge badge-success">&#10003; Done</span>';
+        if (s === 'skipped')    return '<span class="badge badge-info">Already Done</span>';
+        return '';
+    }
+
+    /* ── Progress ── */
+    function showProgress(on) {
+        divProg.classList.toggle('d-none', !on);
+        if (on) { progBar.style.width = '0%'; progBar.textContent = '0%'; }
+    }
+
+    function setProgress(done, tot, label) {
+        const pct = tot ? Math.round(done / tot * 100) : 0;
+        progBar.style.width = pct + '%';
+        progBar.textContent = pct + '%';
+        progFrac.textContent = done + ' / ' + tot;
+        if (label) progLabel.textContent = label;
+    }
+
+    /* ── Button state ── */
+    var _activeSheet = null;
+    function setLoading(on) {
+        btnFedex.disabled = on;
+        btnCsb4.disabled  = on;
+        // Only the active button shows "Processing…"; the other keeps its label
+        var isFedex = (_activeSheet === 'FEDEX');
+        document.querySelector('.btn-label-f').textContent   = (on && isFedex)  ? ' Processing…' : ' FEDEX - CSB5';
+        document.querySelector('.btn-spinner-f').classList.toggle('d-none', !(on && isFedex));
+        document.querySelector('.btn-icon-f').textContent    = (on && isFedex)  ? '' : '⚡';
+        document.querySelector('.btn-label-c').textContent   = (on && !isFedex) ? ' Processing…' : ' FEDEX - CSB4';
+        document.querySelector('.btn-spinner-c').classList.toggle('d-none', !(on && !isFedex));
+        document.querySelector('.btn-icon-c').textContent    = (on && !isFedex) ? '' : '⚡';
+    }
+
+    /* ── Button click wiring ── */
+    btnFedex.addEventListener('click', function () {
+        if (!confirm('Process all FEDEX sheet orders?\n\nThis will generate shipping labels and print all documents.')) return;
+        _activeSheet = 'FEDEX';
+        handleBatchClick('FEDEX');
+    });
+    btnCsb4.addEventListener('click', function () {
+        if (!confirm('Process all CSB4 sheet orders?\n\nThis will generate shipping labels and print all documents.')) return;
+        _activeSheet = 'CSB4';
+        handleBatchClick('CSB4');
+    });
+
+    /* ── Status bar ── */
+    function setStatus(type, msg) {
+        divStatus.className = 'alert alert-' + type + ' mb-3 batch-status';
+        divStatus.classList.remove('d-none');
+        statusText.innerHTML = msg;
+    }
+
+    /* ── Badges ── */
+    function updateBadges() {
+        badgeDone.textContent = cntDone + ' done';
+        badgeSkip.textContent = cntSkip + ' skipped';
+        badgeErr.textContent  = cntErr  + ' errors';
+        badgeSkip.classList.toggle('d-none', cntSkip === 0);
+        badgeErr.classList.toggle('d-none',  cntErr  === 0);
+    }
+
+    /* ── Print helpers ── */
+
+    /* Extract .pdf or .png extension from a stored URL; fallback to .pdf */
+    function extFrom(url) {
+        const m = url && url.match(/\.(pdf|png)$/i);
+        return m ? '.' + m[1].toLowerCase() : '.pdf';
+    }
+
+    /* ── QZ Tray — silent printing to the Zebra by name ────────────────────────
+       QZ Tray is a free local service that lets browser JS print to any named
+       printer without a dialog. Download and install from https://qz.io
+       On first run QZ Tray shows an "Action Required" dialog — tick "Remember this
+       decision" and click Allow once; it will auto-allow on all future sessions.  */
+
+    /* Self-signed certificate (RSA-2048, 10-year) — enables "Remember this decision"
+       in QZ Tray so the user only needs to approve once, permanently.              */
+    var _QZ_CERT = '-----BEGIN CERTIFICATE-----\n' +
+        'MIIDdTCCAl2gAwIBAgIUDtzP2YMcL0wgPE57jk1ZwPKCDC0wDQYJKoZIhvcNAQEL\n' +
+        'BQAwSjEiMCAGA1UEAwwZaW5ob3VzZS5hbmRhYXpmYXNoaW9uLmNvbTEXMBUGA1UE\n' +
+        'CgwOQW5kYWF6IEZhc2hpb24xCzAJBgNVBAYTAklOMB4XDTI2MDYyNjEyMDcyNVoX\n' +
+        'DTM2MDYyMzEyMDcyNVowSjEiMCAGA1UEAwwZaW5ob3VzZS5hbmRhYXpmYXNoaW9u\n' +
+        'LmNvbTEXMBUGA1UECgwOQW5kYWF6IEZhc2hpb24xCzAJBgNVBAYTAklOMIIBIjAN\n' +
+        'BgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA32g0WjchCYEQo1aXjG+BHbCZu1Qp\n' +
+        'U5WJxVo/nnwkeYZYaLZu4172GdzfSHakYu75AU15QAFWF8EZHeth9MZ0DMDRlEnf\n' +
+        'ss05mYUE1H+V1aHdrFEEUuuP0ZHMXk3YYk2voBNLk6r95ELG1gVPg0vDQowxlMAo\n' +
+        'Yamm17VBOTIKopEI2n3GlnaZVvH2vWhHktTqwkQv6GGrlUX8k2z2RRT/6BKGZ6/r\n' +
+        'MYh3MhCFBggVf3+xsnjGXy7zRe39z2yjK+dkHQKEiYhzkt2Kjjk0C/lt3oH4t3Sn\n' +
+        'EwMOze1wGAzh4DGQEFqdyT1jZkyciyGN1Xe25wsBidHZr3zo8xQ+1Ug3QQIDAQAB\n' +
+        'o1MwUTAdBgNVHQ4EFgQU/KZxgMmnwlJl4t14S2Y1N2rnXhowHwYDVR0jBBgwFoAU\n' +
+        '/KZxgMmnwlJl4t14S2Y1N2rnXhowDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0B\n' +
+        'AQsFAAOCAQEAwytWaNBc4x5O6oBadXBIW2b1rrp01gUdr4ML6TzllAMn5ZT4r3kV\n' +
+        'K5i5Y89o8blr1mdAJZGcL4WhmLW0CxrdJypTyA1GkoyeL/E5+iD00Iw9R+W0LocP\n' +
+        'q9PvsorjV8HYmaEMDlowFR+SfFoipBRIq6o7ikT5vrkfWntIiGPAPEF30K9f0OtT\n' +
+        'ieBVxG7PpFRgVxKvgsBAcvDFKZ9CO1Py6uvIn6rbqgEZkTYRyv1forvV4maxyGq+\n' +
+        'o3TFq8vIQDHmkAGXKTvmkyU052wn55uTIfdCb+kQSxQ2tO4tMQcdZPydiIbYEC0X\n' +
+        'f6ARhq2UcjdcO0sEs3avpCBe82ZOySlASQ==\n' +
+        '-----END CERTIFICATE-----';
+
+    var _QZ_KEY = 'MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDfaDRaNyEJgRCj' +
+        'VpeMb4EdsJm7VClTlYnFWj+efCR5hlhotm7jXvYZ3N9IdqRi7vkBTXlAAVYXwRkd' +
+        '62H0xnQMwNGUSd+yzTmZhQTUf5XVod2sUQRS64/RkcxeTdhiTa+gE0uTqv3kQsbW' +
+        'BU+DS8NCjDGUwChhqabXtUE5MgqikQjafcaWdplW8fa9aEeS1OrCRC/oYauVRfyT' +
+        'bPZFFP/oEoZnr+sxiHcyEIUGCBV/f7GyeMZfLvNF7f3PbKMr52QdAoSJiHOS3YqO' +
+        'OTQL+W3egfi3dKcTAw7N7XAYDOHgMZAQWp3JPWNmTJyLIY3Vd7bnCwGJ0dmvfOjz' +
+        'FD7VSDdBAgMBAAECggEAXx/ekr9AiOx0qifXtYtQ3dRxUOtAAX/9vpNz3UacvUXv' +
+        '5P4w7w1jGpYKWK9zxVBdpClZxGANSWYGDNBJ0FCj3z5Gvq5J2rc5nF2gNd7xbJpU' +
+        'aefBQJFelmxPKaRZy1mquy0cFA9NteCdC0oNlikvRemtvtmnGBaFnPlngTQGhTsS' +
+        'RDrrvK/WT5EwkSNeIsW8RTUiqmNDk4jfLu6GmUM5O+bYGQkvk0DwealMnCBZ2/qd' +
+        'CKHZvZIkJT6SkzhbejME8K/UTwyioqXTv1eX8KGNhTY9Ji5gsAWhiqswZAU7HT25' +
+        'm9AwJy83VkpAwnOlyZE8r8Z4+uj6rEz+v3JXDNY/hQKBgQD5dP2JT7HKAP3sfuxd' +
+        'k4Q4IQbQ0/w8TWaP/VpI6f/H3D36MAOEd9aNorZtLJy0k+pcqBAxp1FgkKHopQTU' +
+        'VjAtfRjElXwzDhOPncc2yaT98HOmChn4au6AhGA/1zhYGOlmjZ6VsoOrN/NosPF8' +
+        'nJmUU2p2rpcfVXjvZ5AlDWKMzwKBgQDlRExvJloSFPqBpk59u96JTTPLgI7iEUY2' +
+        'SYclK4IcC8r4V9gQVtAkoolrVCGJjtbVlZHZ7EJcbm5GmNL9iNLvlYMMD9FpucO1' +
+        '9WCz8p8qx1EBXUKxiJVFUulU2KnCOLzuE6FYRBZhjj9zYoTCYQNJkORNvrU2rx3O' +
+        '6ynE5HGe7wKBgQD5Gl5j0/VSJxNqKoSWHU0XT8OinU1wWkpk1zZlQWZuifxJ7dBV' +
+        'Y+YYobdR5g7GND8AL8OcEd0tdMB5tO/Rqg+KHTWyeSQBR7k43PGmQE5GVurlj4jH' +
+        'jOCF7aq/lYdqUdYg1qLaEd1yCPlEPg2nximG+JWD1myKmaueReinV2pl+QKBgHxP' +
+        'tx4Bbo8lXtsToLWeO0C5Yp8yOscrVKW04plt6ONqJYjYoKfjWoKyus4+VNzwXV57' +
+        '9hRyfVz+575RuP2NxcnwiJjurr6j4hF0VhXcNR+N6UdTGQmIJF/tX+UIgat09kQk' +
+        '0rQ4XuZQqejXf2KiFZU7Af+Bq2JWO1RpwEEpGM5zAoGBAO8AS/XJ7TFcGi/57GCO' +
+        'nxFUFWtuyWQ66OwOFQCV4QKN2JpifGL9C9rOi2FNYYmvRpTH4BB8Xfl3WdTnCgcH' +
+        'KxgsQpmd4u+8osGuMkf31Hw3Ikad+n53KRpnIptXmBvbfh+anpBi3SvTf1aO8JAa' +
+        'Di8khklT8TvWgOPxMVx0MWVR';
+
+    function _pemToDer(b64) {
+        var bin = atob(b64);
+        var buf = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+        return buf.buffer;
+    }
+
+    function _qzConfigure() {
+        if (!window.qz) return;
+        qz.security.setCertificatePromise(function (resolve) { resolve(_QZ_CERT); });
+        qz.security.setSignaturePromise(function (toSign) {
+            return function (resolve, reject) {
+                crypto.subtle.importKey(
+                    'pkcs8', _pemToDer(_QZ_KEY),
+                    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-1' },
+                    false, ['sign']
+                ).then(function (key) {
+                    return crypto.subtle.sign(
+                        'RSASSA-PKCS1-v1_5', key,
+                        new TextEncoder().encode(toSign)
+                    );
+                }).then(function (sig) {
+                    var arr = new Uint8Array(sig);
+                    resolve(btoa(String.fromCharCode.apply(null, arr)));
+                }).catch(reject);
+            };
+        });
+    }
+
+    /* Returns true if QZ Tray is installed and reachable */
+    async function _qzConnect() {
+        if (!window.qz) return false;
+        if (qz.websocket.isActive()) return true;
+        _qzConfigure();
+        try {
+            await qz.websocket.connect({ retries: 1, delay: 0.5 });
+            return true;
+        } catch (e) { return false; }
+    }
+
+    /* Convert a Blob to a base64 data string (without the data: prefix) */
+    function _blobToBase64(blob) {
+        return new Promise(function (resolve, reject) {
+            var r = new FileReader();
+            r.onload  = function () { resolve(r.result.split(',')[1]); };
+            r.onerror = reject;
+            r.readAsDataURL(blob);
+        });
+    }
+
+    /* Hard timeout wrapper — prevents qz.print() from hanging 20+ s on a bad printer.
+       Without this, a misconfigured printer causes qz.print() to hang silently,
+       delaying every invoice by 20-27 s before the catch block finally fires. */
+    function _withTimeout(promise, ms) {
+        return Promise.race([
+            promise,
+            new Promise(function(_, reject) {
+                setTimeout(function() { reject(new Error('QZ timeout after ' + ms + 'ms')); }, ms);
+            })
+        ]);
+    }
+
+    /* Print an invoice PDF blob via QZ Tray to the system default printer (A4/letter).
+       getDefault() is cached; qz.print() is raced with a 5 s hard timeout so a bad
+       printer fails in 5 s instead of hanging for 20-27 s. */
+    async function _printInvoiceViaQZ(blob, preB64) {
+        if (!await _qzConnect()) return false;
+        try {
+            if (!_defaultPrinterName) {
+                _defaultPrinterName = await _withTimeout(qz.printers.getDefault(), 3000);
+            }
+            if (!_defaultPrinterName) return false;
+            //var cfg = qz.configs.create(_defaultPrinterName, { copies: 1, colorType: 'color' });
+            var cfg = qz.configs.create(_defaultPrinterName, {
+                copies:    1,
+                colorType: 'color',
+                units:  'in',
+                margins:   { top: 0.3, right: 0, bottom: 0, left: 0 }
+            });
+
+            var b64 = preB64 || await _blobToBase64(blob);
+            await _withTimeout(qz.print(cfg, [{ type: 'pixel', format: 'pdf', flavor: 'base64', data: b64 }]), 5000);
+            return true;
+        } catch (e) {
+            console.warn('[FedEx] QZ invoice failed (' + e.message + ') — window fallback');
+            _defaultPrinterName = null; // reset so next row re-discovers
+            return false;
+        }
+    }
+
+    /* Print multiple PNG blobs as ONE QZ Tray job.
+       qz.print() raced with 5 s hard timeout — fails fast on unresponsive Zebra. */
+    async function _printPNGsBatchViaQZ(blobs, preB64s) {
+        if (!blobs.length) return true;
+        if (!await _qzConnect()) return false;
+        try {
+            var printer = await _findZebraPrinter();
+            if (!printer) return false;
+            var cfg = qz.configs.create(printer, {
+                size:      { width: 4, height: 6 },
+                units:     'in',
+                density:   203, 
+                margins:   { top: 0.16, right: 0, bottom: 0, left: 0 },
+                colorType: 'grayscale',
+                copies:    1
+            });
+            var b64s = preB64s || await Promise.all(blobs.map(_blobToBase64));
+            await _withTimeout(qz.print(cfg, b64s.map(function(b) {
+                return { type: 'pixel', format: 'image', flavor: 'base64', data: b };
+            })), 5000);
+            return true;
+        } catch (e) {
+            console.warn('[FedEx] QZ PNG batch failed (' + e.message + ')');
+            return false;
+        }
+    }
+
+    /* Print a single PNG blob via QZ Tray (used for manual button clicks). */ 
+    async function _printViaQZ(blob) {
+        if (!await _qzConnect()) return false;
+        try {
+            var printer = await _findZebraPrinter();
+            if (!printer) return false;
+            var cfg = qz.configs.create(printer, {
+                size:      { width: 4, height: 6 },
+                units:     'in',
+                density:   203,
+                margins:   { top: 0.16, right: 0, bottom: 0, left: 0 },
+                colorType: 'grayscale',
+                copies:    1
+            });
+            var b64 = await _blobToBase64(blob);
+            await _withTimeout(qz.print(cfg, [{ type: 'pixel', format: 'image', flavor: 'base64', data: b64 }]), 5000);
+            return true;
+        } catch (e) {
+            console.warn('QZ label print failed:', e.message || e);
+            return false;
+        }
+    }
+
+    /* ── File save helper ────────────────────────────────────────────────────────
+       1st try : write into Desktop folder via File System Access API
+       2nd try : add to JSZip (downloaded as one .zip at batch end)
+       3rd try : direct blob download (individual file, goes to Downloads)       */
+    async function _saveFile(name, blob) {
+        if (_saveDir) {
+            try {
+                var fh = await _saveDir.getFileHandle(name, { create: true });
+                var wr = await fh.createWritable();
+                await wr.write(blob);
+                await wr.close();
+                return; // saved to Desktop folder — done
+            } catch (e) {
+                console.warn('[FedEx] folder write failed, falling back:', name, e.message || e);
+            }
+        }
+        if (_batchZip) {
+            _batchZip.file(name, blob);
+            _zipHasFiles = true;
+            return; // queued for ZIP
+        }
+        /* Last resort: trigger individual browser download */
+        _blobDownload(name, blob);
+    }
+
+    function _blobDownload(name, blob) {
+        var url = URL.createObjectURL(blob);
+        var a   = document.createElement('a');
+        a.href = url; a.download = name;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(url); }, 8000);
+    }
+
+    var _pwSeq = 0;
+
+    /* Fallback PNG print via shared window (used when QZ Tray is not available).
+       Navigates the shared window to /fedex/print/label which shows the image
+       and auto-prints it; signals back via window.opener[bridge]() after afterprint. */
+    function _printInSharedWin(item, onDone) {
+        var win = _pdfPrintWin;
+        if (!win || win.closed) { onDone(); return; }
+
+        var done = false;
+        var finish = function () {
+            if (done) return;
+            done = true;
+            onDone();
+        };
+
+        var bridge = '__pw_' + (++_pwSeq);
+        window[bridge] = function () {
+            delete window[bridge];
+            finish();
+        };
+        win.location.href = '/fedex/print/label'
+            + '?url=' + encodeURIComponent(item.url)
+            + '&cb='  + encodeURIComponent(bridge);
+
+        /* Fallback if afterprint never fires (e.g. user cancels or QZ timeout) */
+        setTimeout(function () {
+            if (window[bridge]) { delete window[bridge]; }
+            if (!done) finish();
+        }, 20000);
+
+        setTimeout(finish, 30000); /* absolute safety net */
+    }
+
+    /* ── Manual button print (Print / Download buttons in the table) ─────────── */
+
+    /* Write PNG blob into an already-open window and trigger print */
+    function printPngInWindow(blob, win) {
+        var blobUrl = URL.createObjectURL(blob);
+        win.document.open();
+        win.document.write('<!DOCTYPE html><html><head><style>'
+            + '*{margin:0;padding:0;box-sizing:border-box}'
+            /* Screen: native resolution — no downscaling, keeps INV/PO/REF/DEPT sharp */
+            + '@media screen{html,body{background:#fff}'
+            + 'img{display:block;width:100%;height:auto;'
+            + 'image-rendering:-webkit-optimize-contrast;image-rendering:crisp-edges}}'
+            /* Print: exact 4×6 label dimensions */
+            + '@media print{'
+            + '@page{size:4in 6in;margin:0}'
+            + 'html,body{width:4in;height:6in;overflow:hidden}'
+            + 'img{display:block;width:4in;height:6in;object-fit:contain}}'
+            + '</style></head><body>'
+            + '<img src="' + blobUrl + '" onload="window.print()">'
+            + '</body></html>');
+        win.document.close();
+        win.focus();
+        win.addEventListener('afterprint', function () {
+            URL.revokeObjectURL(blobUrl);
+            win.close();
+        });
+    }
+
+    /* Manual PDF button: navigate to server URL — not blob URL, which Chrome
+       downloads instead of rendering, producing a second unwanted file. */
+    function printPdfInWindow(serverUrl, win) {
+        win.location.href = serverUrl;
+        win.focus();
+        try {
+            win.addEventListener('load', function () { try { win.print(); } catch (e) {} });
+        } catch (e) {}
+    }
+
+    /* ── Utilities ── */
+    function _nowStamp() {
+        var d = new Date(), p = function (n) { return n < 10 ? '0' + n : n; };
+        return d.getFullYear() + '' + p(d.getMonth() + 1) + '' + p(d.getDate())
+             + '_' + p(d.getHours()) + '' + p(d.getMinutes()) + '' + p(d.getSeconds());
+    }
+
+    function esc(s) {
+        return String(s)
+            .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+})();
+</script>
+@endsection
+
+<style>
+    #top-navigation ul.navbar-nav{display: none;}
+</style>
