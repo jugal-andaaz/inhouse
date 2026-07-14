@@ -27,4 +27,5 @@ yarn-error.log
 auth.json
 /nbproject/private/
 /nbproject
+/app/google-sheets
 
