@@ -28,4 +28,6 @@ auth.json
 /nbproject/private/
 /nbproject
 /app/google-sheets
+app/google-sheets
+app/google-sheets/*.json
 
